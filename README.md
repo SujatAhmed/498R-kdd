@@ -14,18 +14,18 @@
        run the save_as_csv.py file. The 'dataset_key' is the exact name
        of the datasets. 'split' denotes tran val and test data. 
 
-**step3:** (Generate the fluctuation datasets)
+**step3:** (Generate the residual datasets)
 
        Go to the fluctuation_calculation.py file. The 'directory_path' is the same 'folder_path' 
        The 'start' and 'end' indices discard those indices that don't
        have predictions. 
 
-**Step3:** (Train the model on fluctuation data and predict the fluctuations)
+**Step3:** (Train the model on residual data and predict the residuals)
        
-       Once we have our fluctuation dataset, upload the datasets to the dataset
+       Once we have our residual dataset, upload the datasets to the dataset
        folder and again train the model using the Huber loss.
 
-**Step4:** (final performance = base prediction- fluctuation prediction)
+**Step4:** (final performance = base predictions- alpha*residual predictions)
   
       Go to the final_performance.py file.
       'slice_index' adjust the indices of base value predictions and fluctuatuaion predictions.
