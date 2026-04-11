@@ -1,6 +1,6 @@
-__pycache__/ 
-*.pyc 
-*.pyo 
-*.pyd 
-.env 
-.DS_Store 
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.DS_Store
