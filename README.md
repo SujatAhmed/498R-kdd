@@ -65,6 +65,7 @@ rm -rf ./figures/*
 
 **Cite our paper:**
 
+```bibtex
 @inproceedings{biswas2026one,
   title={One Step Closer to Ground Truth: A Multi-Scale Residual-Aware Representation Learning Pipeline for Predicting Time Series Data},
   author={Biswas, Amrijit and Kamal, Mustafa and Krambroeckers, Robin and Elahi, MM Lutfe and Momen, Sifat and Mohammed, Nabeel and Rahman, Shafin},
