@@ -63,7 +63,7 @@ rm -rf ./figures/*
 
 
 
-**Cite our paper:**
+> **📚 Cite our paper**
 
 ```bibtex
 @inproceedings{biswas2026one,
