@@ -61,4 +61,16 @@ rm -rf ./npy_store/*
 rm -rf ./predictions/*
 rm -rf ./figures/*
 
+
+
+**Cite our paper:**
+
+@inproceedings{biswas2026one,
+  title={One Step Closer to Ground Truth: A Multi-Scale Residual-Aware Representation Learning Pipeline for Predicting Time Series Data},
+  author={Biswas, Amrijit and Kamal, Mustafa and Krambroeckers, Robin and Elahi, MM Lutfe and Momen, Sifat and Mohammed, Nabeel and Rahman, Shafin},
+  booktitle={Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2},
+  pages={162--173},
+  year={2026}
+}
+
       
