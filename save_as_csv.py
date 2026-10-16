@@ -1,91 +1,59 @@
-import numpy as np
-import pandas as pd
-from collections import defaultdict
+"""Average overlapping window predictions into one value per time index and save as CSV.
+
+Example:
+    python save_as_csv.py --preds ./predictions/ETTh1_96_96/epoch3_train_pred_96.npy \
+        --dataset_csv ./dataset/ETT-small/ETTh1.csv --split train --out_dir ./residual_work/ETTh1
+"""
+import argparse
 import os
 
-#                   -------------- All inputs are here (save all csv files for train val and test) --------------
+import numpy as np
+import pandas as pd
 
-dataset_key= ''                # which dataset (key from the file_paths)
-split= 'vali'                  # train / validation / test
-features= 1
-
-preds_filename =      ''                            # predictions npy file
-folder_path = ''                                     # Where to save the CSV file
-
-
-#      -------- define a class for extracting the feature names ---------
-class DatasetManager:
-
-    
-    file_paths = {                                            # provide the data path to the actual datasets (CSV files)
-        'ETTh1': '',
-        'ETTh2': '',
-        'ETTm1': '',
-        'ETTm2': '',
-        'electricity': '',
-        'exchange_rate': '',
-        'traffic': '',
-        'weather': '',
-    }
-    
-    @classmethod
-    def get_columns_excluding_date(cls, dataset_key):
-
-        # Check if the dataset key is valid
-        if dataset_key not in cls.file_paths:
-            raise ValueError(f"Dataset '{dataset_key}' not found in the file path mappings.")
-        
-        # Get the file path
-        file_path = cls.file_paths[dataset_key]
-        
-        # Read the CSV and exclude 'date' column
-        data = pd.read_csv(file_path)
-        column_names = [col for col in data.columns if col.lower() != 'date']
-        return column_names
+parser = argparse.ArgumentParser(description='Overlap-average window predictions and save them as a CSV')
+parser.add_argument('--preds', required=True, help='predictions .npy file, shape (windows, pred_len, variables)')
+parser.add_argument('--dataset_csv', required=True, help='original dataset CSV (used for the column names)')
+parser.add_argument('--split', required=True, choices=['train', 'vali', 'test'], help='which split the predictions belong to')
+parser.add_argument('--out_dir', required=True, help='folder to save <split>_predictions.csv in')
+parser.add_argument('--target', default='OT', help='target column; moved last, as the data loader does')
+parser.add_argument('--stride', type=int, default=1, help='step between consecutive windows')
+args = parser.parse_args()
 
 
-# -------------------------------------------------------- Input the  files  -------------------------------------------------------------
-
-predictions = np.load(preds_filename)
-
-pred_len = 96
-stride = 1                                             
-
-
-index_sum = defaultdict(lambda: np.zeros(features))
-index_count = defaultdict(int)
+# -------- column names in the order the data loader uses --------
+def get_columns_excluding_date(file_path, target):
+    columns = [col for col in pd.read_csv(file_path, nrows=0).columns if col.lower() != 'date']
+    if target in columns:
+        columns = [col for col in columns if col != target] + [target]
+    return columns
 
 
-for i in range(predictions.shape[0]):
+# -------- average every time index over all windows that cover it --------
+predictions = np.load(args.preds, mmap_mode='r')
+num_windows, pred_len, features = predictions.shape
+print(f"Loaded {args.preds}: windows={num_windows}, pred_len={pred_len}, features={features}")
+
+length = (num_windows - 1) * args.stride + pred_len
+index_sum = np.zeros((length, features))
+index_count = np.zeros(length)
+
+for start in range(0, num_windows, 512):
+    block = np.asarray(predictions[start:start + 512], dtype=np.float64)
     for j in range(pred_len):
-        global_index = i * stride + j
-        index_sum[global_index] += predictions[i, j, :]
-        index_count[global_index] += 1
+        idx = (start + np.arange(len(block))) * args.stride + j
+        index_sum[idx] += block[:, j, :]
+        index_count[idx] += 1
 
-
-max_index = max(index_sum.keys())
-final_predictions = np.zeros((max_index + 1, features))
-
-for index in index_sum:
-    final_predictions[index, :] = index_sum[index] / index_count[index]
-
+final_predictions = index_sum / index_count[:, None]
 print("Final Predictions Shape:", final_predictions.shape)
 
 
-# ---------- Saving as CSV files ------------
+# -------- save as CSV --------
+column_names = get_columns_excluding_date(args.dataset_csv, args.target)
+if len(column_names) != features:
+    raise ValueError(f"{args.dataset_csv} has {len(column_names)} variables but the predictions have {features}")
 
-def save_predictions_to_csv(predictions, column_names, file_path):
-    """
-    Save predictions to a CSV file using specified column names.
-    """
-    df = pd.DataFrame(predictions, columns=column_names)
-    df.to_csv(file_path, index=False)
-
-
-
-file_path = os.path.join(folder_path,f'{split}_predictions.csv')
-
-
-column_names = DatasetManager.get_columns_excluding_date(dataset_key)
-
-save_predictions_to_csv(final_predictions, column_names, file_path)
+os.makedirs(args.out_dir, exist_ok=True)
+file_path = os.path.join(args.out_dir, f'{args.split}_predictions.csv')
+pd.DataFrame(final_predictions, columns=column_names).to_csv(file_path, index=False)
+print(f"Saved {file_path}")

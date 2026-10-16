@@ -33,8 +33,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         return model_optim
 
     def _select_criterion(self):
-        criterion = nn.MSELoss()
-        return criterion
+        if self.args.loss.lower() == 'huber':
+            return nn.HuberLoss()
+
+        return nn.MSELoss()
 
     def _save_predictions_real_scale(self, preds, trues, data_set, flag, epoch, pred_len):
         """Save predictions in real scale using direct inverse transformation"""
