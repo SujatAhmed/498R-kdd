@@ -252,263 +252,263 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
 
 
-    def test(self, setting, test=0):
-        test_data, test_loader = self._get_data(flag='test')
-        if test:
-            print('loading model')
-            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
-
-        preds = []
-        trues = []
-        folder_path = './test_results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        self.model.eval()
-        with torch.no_grad():
-            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                batch_x = batch_x.float().to(self.device)
-                batch_y = batch_y.float().to(self.device)
-
-                if 'PEMS' in self.args.data or 'Solar' in self.args.data:
-                    batch_x_mark = None
-                    batch_y_mark = None
-                else:
-                    batch_x_mark = batch_x_mark.float().to(self.device)
-                    batch_y_mark = batch_y_mark.float().to(self.device)
-
-                # decoder input
-                dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
-                dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
-                # encoder - decoder
-                if self.args.use_amp:
-                    with torch.cuda.amp.autocast():
-                        if self.args.output_attention:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                        else:
-                            outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                else:
-                    if self.args.output_attention:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
-                    else:
-                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                outputs = outputs.detach().cpu().numpy()
-                batch_y = batch_y.detach().cpu().numpy()
-
-                preds.append(outputs)
-                trues.append(batch_y)
-                
-                if i % 20 == 0:
-                    input = batch_x.detach().cpu().numpy()
-                    if test_data.scale and self.args.inverse:
-                        shape = input.shape
-                        input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
-                    gt = np.concatenate((input[0, :, -1], batch_y[0, :, -1]), axis=0)
-                    pd = np.concatenate((input[0, :, -1], outputs[0, :, -1]), axis=0)
-                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
-
-        if len(preds) == 0:
-            print("No test predictions collected!")
-            return
-
-        preds = np.array(preds)
-        trues = np.array(trues)
-        print('test shape:', preds.shape, trues.shape)
-        preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
-        trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
-        print('test shape:', preds.shape, trues.shape)
-
-        # Save test predictions in real scale using your direct method
-        self._save_predictions_real_scale(preds, trues, test_data, 'test', 0, self.args.pred_len)
-
-        # Apply inverse transformation for metric calculation
-        preds_shape = preds.shape
-        trues_shape = trues.shape
-        preds_for_metric = preds.reshape(-1, preds_shape[-1])
-        trues_for_metric = trues.reshape(-1, trues_shape[-1])
-        preds_real = test_data.inverse_transform(preds_for_metric).reshape(preds_shape)
-        trues_real = test_data.inverse_transform(trues_for_metric).reshape(trues_shape)
-
-        # result save
-        folder_path = './results/' + setting + '/'
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        mae, mse, rmse, mape, mspe = metric(preds_real, trues_real)
-        print('mse:{}, mae:{}'.format(mse, mae))
-        f = open("result_long_term_forecast.txt", 'a')
-        f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}'.format(mse, mae))
-        f.write('\n')
-        f.write('\n')
-        f.close()
-
-        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
-        np.save(folder_path + 'pred.npy', preds_real)
-        np.save(folder_path + 'true.npy', trues_real)
-
-        return
-
-
-    
-###########################  Auto-regressive test One (Adjusst stride if you need faster inference)   ##################################
-    
-
-    # def test(self, setting, test=0, auto_regressive_stride=1):
+    # def test(self, setting, test=0):
     #     test_data, test_loader = self._get_data(flag='test')
     #     if test:
     #         print('loading model')
     #         self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
-    
+    #
     #     preds = []
     #     trues = []
     #     folder_path = './test_results/' + setting + '/'
     #     if not os.path.exists(folder_path):
     #         os.makedirs(folder_path)
-    
+    #
     #     self.model.eval()
     #     with torch.no_grad():
     #         for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
     #             batch_x = batch_x.float().to(self.device)
     #             batch_y = batch_y.float().to(self.device)
-    
+    #
     #             if 'PEMS' in self.args.data or 'Solar' in self.args.data:
     #                 batch_x_mark = None
     #                 batch_y_mark = None
-    #                 use_marks = False
     #             else:
     #                 batch_x_mark = batch_x_mark.float().to(self.device)
     #                 batch_y_mark = batch_y_mark.float().to(self.device)
-    #                 use_marks = True
-    
-    #             seq_len = self.args.seq_len
-    #             label_len = self.args.label_len
-    #             total_pred_len = self.args.pred_len
-    #             stride = auto_regressive_stride
-    
-    #             # Build full time marks for the entire period [0, seq_len+pred_len-1]
-    #             if use_marks:
-    #                 full_marks = torch.zeros(1, seq_len + total_pred_len, batch_x_mark.shape[-1]).to(self.device)
-    #                 full_marks[:, :seq_len, :] = batch_x_mark
-    #                 # Fill future marks from batch_y_mark (which starts at index seq_len - label_len)
-    #                 for t in range(seq_len, seq_len + total_pred_len):
-    #                     y_idx = t - (seq_len - label_len)
-    #                     if y_idx < batch_y_mark.shape[1]:
-    #                         full_marks[:, t, :] = batch_y_mark[:, y_idx, :]
-    #                     else:
-    #                         full_marks[:, t, :] = batch_y_mark[:, -1, :]   # fallback (should not happen)
-    #             else:
-    #                 full_marks = None
-    
-    #             current_seq = batch_x.clone()   # (1, seq_len, F)
-    #             full_pred = torch.zeros(1, total_pred_len, batch_x.shape[-1]).to(self.device)
-    
-    #             pos = 0
-    #             while pos < total_pred_len:
-    #                 # Encoder input: last seq_len values of extended series
-    #                 if pos == 0:
-    #                     enc_input = current_seq
-    #                 else:
-    #                     extended = torch.cat([current_seq, full_pred[:, :pos, :]], dim=1)
-    #                     enc_input = extended[:, -seq_len:, :]
-    
-    #                 # Decoder input: last label_len values of extended series
-    #                 if pos == 0:
-    #                     known_vals = current_seq[:, -label_len:, :]
-    #                 else:
-    #                     extended = torch.cat([current_seq, full_pred[:, :pos, :]], dim=1)
-    #                     if pos >= label_len:
-    #                         known_vals = extended[:, -label_len:, :]
-    #                     else:
-    #                         known_vals = torch.cat([current_seq[:, -(label_len - pos):, :],
-    #                                                 full_pred[:, :pos, :]], dim=1)
-    #                 dec_inp = torch.zeros(1, label_len + total_pred_len, batch_x.shape[-1]).to(self.device)
-    #                 dec_inp[:, :label_len, :] = known_vals
-    
-    #                 # Time marks for this step
-    #                 if use_marks:
-    #                     enc_mark = full_marks[:, pos:pos+seq_len, :]
-    #                     dec_mark = full_marks[:, pos:pos+label_len+total_pred_len, :]
-    #                 else:
-    #                     enc_mark = None
-    #                     dec_mark = None
-    
-    #                 # Forward pass
-    #                 if self.args.use_amp:
-    #                     with torch.cuda.amp.autocast():
-    #                         if self.args.output_attention:
-    #                             outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)[0]
-    #                         else:
-    #                             outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)
-    #                 else:
+    #
+    #             # decoder input
+    #             dec_inp = torch.zeros_like(batch_y[:, -self.args.pred_len:, :]).float()
+    #             dec_inp = torch.cat([batch_y[:, :self.args.label_len, :], dec_inp], dim=1).float().to(self.device)
+    #             # encoder - decoder
+    #             if self.args.use_amp:
+    #                 with torch.cuda.amp.autocast():
     #                     if self.args.output_attention:
-    #                         outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)[0]
+    #                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
     #                     else:
-    #                         outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)
-    
-    #                 f_dim = -1 if self.args.features == 'MS' else 0
-    #                 outputs = outputs[:, -total_pred_len:, f_dim:]
-    #                 remaining = total_pred_len - pos
-    #                 take = min(stride, remaining)
-    #                 full_pred[:, pos:pos+take, :] = outputs[:, :take, :]
-    #                 pos += take
-    
-    #             outputs = full_pred.detach().cpu().numpy()
-    #             batch_y_true = batch_y[:, -total_pred_len:, f_dim:].detach().cpu().numpy()
-    
+    #                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #             else:
+    #                 if self.args.output_attention:
+    #                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)[0]
+    #                 else:
+    #                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+    #
+    #             f_dim = -1 if self.args.features == 'MS' else 0
+    #             outputs = outputs[:, -self.args.pred_len:, f_dim:]
+    #             batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+    #             outputs = outputs.detach().cpu().numpy()
+    #             batch_y = batch_y.detach().cpu().numpy()
+    #
     #             preds.append(outputs)
-    #             trues.append(batch_y_true)
-    
-    #             # Optional visualisation (unchanged)
+    #             trues.append(batch_y)
+    #
     #             if i % 20 == 0:
-    #                 input_np = batch_x.detach().cpu().numpy()
+    #                 input = batch_x.detach().cpu().numpy()
     #                 if test_data.scale and self.args.inverse:
-    #                     shape = input_np.shape
-    #                     input_np = test_data.inverse_transform(input_np.squeeze(0)).reshape(shape)
-    #                 gt = np.concatenate((input_np[0, :, -1], batch_y_true[0, :, -1]), axis=0)
-    #                 pd = np.concatenate((input_np[0, :, -1], outputs[0, :, -1]), axis=0)
+    #                     shape = input.shape
+    #                     input = test_data.inverse_transform(input.squeeze(0)).reshape(shape)
+    #                 gt = np.concatenate((input[0, :, -1], batch_y[0, :, -1]), axis=0)
+    #                 pd = np.concatenate((input[0, :, -1], outputs[0, :, -1]), axis=0)
     #                 visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
-    
+    #
     #     if len(preds) == 0:
     #         print("No test predictions collected!")
     #         return
-    
-    #     preds = np.concatenate(preds, axis=0)
-    #     trues = np.concatenate(trues, axis=0)
+    #
+    #     preds = np.array(preds)
+    #     trues = np.array(trues)
     #     print('test shape:', preds.shape, trues.shape)
-    
-    #     # Save raw predictions (original scale) – unchanged
+    #     preds = preds.reshape(-1, preds.shape[-2], preds.shape[-1])
+    #     trues = trues.reshape(-1, trues.shape[-2], trues.shape[-1])
+    #     print('test shape:', preds.shape, trues.shape)
+    #
+    #     # Save test predictions in real scale using your direct method
     #     self._save_predictions_real_scale(preds, trues, test_data, 'test', 0, self.args.pred_len)
-    
-    #     # Inverse transform for metric calculation – unchanged
+    #
+    #     # Apply inverse transformation for metric calculation
     #     preds_shape = preds.shape
     #     trues_shape = trues.shape
-    #     preds_flat = preds.reshape(-1, preds_shape[-1])
-    #     trues_flat = trues.reshape(-1, trues_shape[-1])
-    #     preds_real = test_data.inverse_transform(preds_flat).reshape(preds_shape)
-    #     trues_real = test_data.inverse_transform(trues_flat).reshape(trues_shape)
-    
-    #     # Save metrics – unchanged
+    #     preds_for_metric = preds.reshape(-1, preds_shape[-1])
+    #     trues_for_metric = trues.reshape(-1, trues_shape[-1])
+    #     preds_real = test_data.inverse_transform(preds_for_metric).reshape(preds_shape)
+    #     trues_real = test_data.inverse_transform(trues_for_metric).reshape(trues_shape)
+    #
+    #     # result save
     #     folder_path = './results/' + setting + '/'
     #     if not os.path.exists(folder_path):
     #         os.makedirs(folder_path)
-    
+    #
     #     mae, mse, rmse, mape, mspe = metric(preds_real, trues_real)
     #     print('mse:{}, mae:{}'.format(mse, mae))
-    #     with open("result_long_term_forecast.txt", 'a') as f:
-    #         f.write(setting + "  \n")
-    #         f.write('mse:{}, mae:{}'.format(mse, mae))
-    #         f.write('\n\n')
-    
+    #     f = open("result_long_term_forecast.txt", 'a')
+    #     f.write(setting + "  \n")
+    #     f.write('mse:{}, mae:{}'.format(mse, mae))
+    #     f.write('\n')
+    #     f.write('\n')
+    #     f.close()
+    #
     #     np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
     #     np.save(folder_path + 'pred.npy', preds_real)
     #     np.save(folder_path + 'true.npy', trues_real)
-    
+    #
     #     return
+    #
+    #
+    
+###########################  Auto-regressive test One (Adjusst stride if you need faster inference)   ##################################
+    
+
+    def test(self, setting, test=0, auto_regressive_stride=1):
+        test_data, test_loader = self._get_data(flag='test')
+        if test:
+            print('loading model')
+            self.model.load_state_dict(torch.load(os.path.join('./checkpoints/' + setting, 'checkpoint.pth')))
+    
+        preds = []
+        trues = []
+        folder_path = './test_results/' + setting + '/'
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+    
+        self.model.eval()
+        with torch.no_grad():
+            for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
+                batch_x = batch_x.float().to(self.device)
+                batch_y = batch_y.float().to(self.device)
+    
+                if 'PEMS' in self.args.data or 'Solar' in self.args.data:
+                    batch_x_mark = None
+                    batch_y_mark = None
+                    use_marks = False
+                else:
+                    batch_x_mark = batch_x_mark.float().to(self.device)
+                    batch_y_mark = batch_y_mark.float().to(self.device)
+                    use_marks = True
+    
+                seq_len = self.args.seq_len
+                label_len = self.args.label_len
+                total_pred_len = self.args.pred_len
+                stride = auto_regressive_stride
+    
+                # Build full time marks for the entire period [0, seq_len+pred_len-1]
+                if use_marks:
+                    full_marks = torch.zeros(1, seq_len + total_pred_len, batch_x_mark.shape[-1]).to(self.device)
+                    full_marks[:, :seq_len, :] = batch_x_mark
+                    # Fill future marks from batch_y_mark (which starts at index seq_len - label_len)
+                    for t in range(seq_len, seq_len + total_pred_len):
+                        y_idx = t - (seq_len - label_len)
+                        if y_idx < batch_y_mark.shape[1]:
+                            full_marks[:, t, :] = batch_y_mark[:, y_idx, :]
+                        else:
+                            full_marks[:, t, :] = batch_y_mark[:, -1, :]   # fallback (should not happen)
+                else:
+                    full_marks = None
+    
+                current_seq = batch_x.clone()   # (1, seq_len, F)
+                full_pred = torch.zeros(1, total_pred_len, batch_x.shape[-1]).to(self.device)
+    
+                pos = 0
+                while pos < total_pred_len:
+                    # Encoder input: last seq_len values of extended series
+                    if pos == 0:
+                        enc_input = current_seq
+                    else:
+                        extended = torch.cat([current_seq, full_pred[:, :pos, :]], dim=1)
+                        enc_input = extended[:, -seq_len:, :]
+    
+                    # Decoder input: last label_len values of extended series
+                    if pos == 0:
+                        known_vals = current_seq[:, -label_len:, :]
+                    else:
+                        extended = torch.cat([current_seq, full_pred[:, :pos, :]], dim=1)
+                        if pos >= label_len:
+                            known_vals = extended[:, -label_len:, :]
+                        else:
+                            known_vals = torch.cat([current_seq[:, -(label_len - pos):, :],
+                                                    full_pred[:, :pos, :]], dim=1)
+                    dec_inp = torch.zeros(1, label_len + total_pred_len, batch_x.shape[-1]).to(self.device)
+                    dec_inp[:, :label_len, :] = known_vals
+    
+                    # Time marks for this step
+                    if use_marks:
+                        enc_mark = full_marks[:, pos:pos+seq_len, :]
+                        dec_mark = full_marks[:, pos:pos+label_len+total_pred_len, :]
+                    else:
+                        enc_mark = None
+                        dec_mark = None
+    
+                    # Forward pass
+                    if self.args.use_amp:
+                        with torch.cuda.amp.autocast():
+                            if self.args.output_attention:
+                                outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)[0]
+                            else:
+                                outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)
+                    else:
+                        if self.args.output_attention:
+                            outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)[0]
+                        else:
+                            outputs = self.model(enc_input, enc_mark, dec_inp, dec_mark)
+    
+                    f_dim = -1 if self.args.features == 'MS' else 0
+                    outputs = outputs[:, -total_pred_len:, f_dim:]
+                    remaining = total_pred_len - pos
+                    take = min(stride, remaining)
+                    full_pred[:, pos:pos+take, :] = outputs[:, :take, :]
+                    pos += take
+    
+                outputs = full_pred.detach().cpu().numpy()
+                batch_y_true = batch_y[:, -total_pred_len:, f_dim:].detach().cpu().numpy()
+    
+                preds.append(outputs)
+                trues.append(batch_y_true)
+    
+                # Optional visualisation (unchanged)
+                if i % 20 == 0:
+                    input_np = batch_x.detach().cpu().numpy()
+                    if test_data.scale and self.args.inverse:
+                        shape = input_np.shape
+                        input_np = test_data.inverse_transform(input_np.squeeze(0)).reshape(shape)
+                    gt = np.concatenate((input_np[0, :, -1], batch_y_true[0, :, -1]), axis=0)
+                    pd = np.concatenate((input_np[0, :, -1], outputs[0, :, -1]), axis=0)
+                    visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))
+    
+        if len(preds) == 0:
+            print("No test predictions collected!")
+            return
+    
+        preds = np.concatenate(preds, axis=0)
+        trues = np.concatenate(trues, axis=0)
+        print('test shape:', preds.shape, trues.shape)
+    
+        # Save raw predictions (original scale) – unchanged
+        self._save_predictions_real_scale(preds, trues, test_data, 'test', 0, self.args.pred_len)
+    
+        # Inverse transform for metric calculation – unchanged
+        preds_shape = preds.shape
+        trues_shape = trues.shape
+        preds_flat = preds.reshape(-1, preds_shape[-1])
+        trues_flat = trues.reshape(-1, trues_shape[-1])
+        preds_real = test_data.inverse_transform(preds_flat).reshape(preds_shape)
+        trues_real = test_data.inverse_transform(trues_flat).reshape(trues_shape)
+    
+        # Save metrics – unchanged
+        folder_path = './results/' + setting + '/'
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+    
+        mae, mse, rmse, mape, mspe = metric(preds_real, trues_real)
+        print('mse:{}, mae:{}'.format(mse, mae))
+        with open("result_long_term_forecast.txt", 'a') as f:
+            f.write(setting + "  \n")
+            f.write('mse:{}, mae:{}'.format(mse, mae))
+            f.write('\n\n')
+    
+        np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
+        np.save(folder_path + 'pred.npy', preds_real)
+        np.save(folder_path + 'true.npy', trues_real)
+    
+        return
 
 
     
